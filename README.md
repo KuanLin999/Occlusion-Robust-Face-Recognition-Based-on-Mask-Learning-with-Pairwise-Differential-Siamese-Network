@@ -2,7 +2,7 @@
 
 paper link: [https://arxiv.org/pdf/1908.06290.pdf]
 
-利用 mnist 手寫數字辨識實現本篇論文，本 project 只做 PDSN 的部分，並沒有做整體架構的 training。
+利用 mnist 手寫數字辨識嘗試實現本篇論文，目前只做 PDSN 的部分，並沒有做整體架構的 training。
 
 ## load_data.py 
 原 paper 會準備各式各樣的 mask 蓋在特定區域以及其四周，這裡只是先做蓋在 first block (一張影像切割成 5*5 patch 的左上角區域 )
