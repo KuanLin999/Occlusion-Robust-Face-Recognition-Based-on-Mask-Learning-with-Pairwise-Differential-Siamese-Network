@@ -27,7 +27,7 @@ class Res_block(keras.Model):
         return res
 
 
-class PDSN_model(keras.model):
+class PDSN_model(keras.Model):
     def __init__(self):
         super(PDSN_model, self).__init__()
         ### Siamese Network
@@ -58,7 +58,7 @@ class PDSN_model(keras.model):
         return out
 
     def mask_generator(self,x):
-        out = self.layer(x)
+        out = self.conv(x)
         out = self.BN1(out)
         out = tf.math.sigmoid(out)
         return out
@@ -72,11 +72,11 @@ class PDSN_model(keras.model):
 
     def call(self, inputs, training=False, **kwargs):
         Nonocc_image, Occ_image = inputs[:,:,:,0], inputs[:,:,:,1]
+        Nonocc_image, Occ_image = tf.expand_dims(Nonocc_image,axis=-1), tf.expand_dims(Occ_image,axis=-1)
         Nonocc_feature, Occ_feature = self.Siamese_Network(Nonocc_image), self.Siamese_Network(Occ_image)
         Z_different = tf.abs(Nonocc_feature - Occ_feature)
         Z_different = self.mask_generator(Z_different)
         Nonocc_feature_x_Z_different = tf.multiply(Z_different,Nonocc_feature)
         Occ_feature_x_Z_different = tf.multiply(Z_different, Occ_feature)
         pred_label_for_Occ = self.Cls(Occ_feature_x_Z_different)
-
-        return Nonocc_feature_x_Z_different,Occ_feature_x_Z_different,pred_label_for_Occ
+        return Z_different, Nonocc_feature_x_Z_different,Occ_feature_x_Z_different,pred_label_for_Occ

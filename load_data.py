@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import random
-import matplotlib.pyplot as plt
 import cv2
 import pandas as pd
 
@@ -13,13 +12,12 @@ def load_mnist():
 
 def transform(image):
     img = cv2.resize(image, (28,28))
-    img = img / 255
+    img = img/255
     img = np.expand_dims(img, axis=-1)
     return img
 
 def add_random_noise(img,x1,x2,y1,y2):
-    white_noise = np.random.uniform(0,1,size=(x2-x1,y2-y1))
-    img[x1:x2,y1:y2] = white_noise
+    img[x1:x2,y1:y2,:] = np.random.uniform(0,1,size=(x2-x1,y2-y1,1))
     return img
 
 def prepare_data(images,image_labels):
@@ -44,10 +42,23 @@ def prepare_data(images,image_labels):
             random_choose_idx = random.randint(0,len(data)-1)
             Nonocc_image = data[data_idx]
             Occ_image = data[random_choose_idx]
+            Nonocc_image, Occ_image = transform(Nonocc_image), transform(Occ_image)
             Occ_image = add_random_noise(Occ_image, x1, x2, y1, y2)
             label = i
             nonocc_image_list.append(Nonocc_image)
             occ_image_list.append(Occ_image), mnist_label_list.append(label)
 
     mnist_label_list = pd.get_dummies(mnist_label_list)
-    return np.expand_dims(np.array(occ_image_list),axis=-1), np.expand_dims(np.array(nonocc_image_list),axis=-1), np.array(mnist_label_list)
+    return np.array(occ_image_list), np.array(nonocc_image_list), np.array(mnist_label_list)
+
+
+def batch_data(Nonocc_imgs, Occ_images,labels,batch,batch_size):
+    range_min = batch * batch_size
+    range_max = (batch + 1) *batch_size
+    if batch * batch_size > Nonocc_imgs.shape[0]:
+        range_max = Nonocc_imgs.shape[0]
+    index = list(range(range_min, range_max))
+    Nonocc, Occ, occ_label = [],[],[]
+    for i in index:
+        Nonocc.append(Nonocc_imgs[i,:,:,:]), Occ.append(Occ_images[i,:,:,:]), occ_label.append(labels[i,:])
+    return np.array(Nonocc),np.array(Occ),np.array(occ_label)

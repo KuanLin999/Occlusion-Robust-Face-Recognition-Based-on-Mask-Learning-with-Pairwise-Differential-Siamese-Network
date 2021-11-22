@@ -9,8 +9,9 @@ import time
 from sklearn.metrics import accuracy_score
 
 class training_PDSN():
-    def __init__(self, epoch):
+    def __init__(self, epoch, batch_size):
         self.epoch = epoch
+        self.batch_size = batch_size
         self.PDSN = model.PDSN_model()
         self.PDSN.build((1,28,28,2))
         self.PDSN.summary()
@@ -22,7 +23,7 @@ class training_PDSN():
         inputs = tf.concat([Nonocc_image, Occ_image], axis=-1)
         label = tf.cast(label, tf.float32)
         with tf.GradientTape() as tape:
-            Nonocc_feature_x_Z_different, Occ_feature_x_Z_different, pred_label_for_Occ = self.PDSN(inputs)
+            _,Nonocc_feature_x_Z_different, Occ_feature_x_Z_different, pred_label_for_Occ = self.PDSN(inputs)
             different_loss = losses.different_loss(Nonocc_feature_x_Z_different, Occ_feature_x_Z_different)
             CE_loss_for_Occ = losses.cls_loss(label, pred_label_for_Occ)
             total_loss = different_loss + CE_loss_for_Occ
@@ -33,7 +34,7 @@ class training_PDSN():
     def test_step(self, Nonocc_image, Occ_image, label):
         inputs = tf.concat([Nonocc_image, Occ_image], axis=-1)
         label = tf.cast(label, tf.float32)
-        Nonocc_feature_x_Z_different, Occ_feature_x_Z_different, pred_label_for_Occ = self.PDSN(inputs)
+        _, Nonocc_feature_x_Z_different, Occ_feature_x_Z_different, pred_label_for_Occ = self.PDSN(inputs)
         different_loss = losses.different_loss(Nonocc_feature_x_Z_different, Occ_feature_x_Z_different)
         CE_loss_for_Occ = losses.cls_loss(label, pred_label_for_Occ)
         total_loss = different_loss + CE_loss_for_Occ
@@ -61,17 +62,29 @@ class training_PDSN():
         val_writer = tf.summary.create_file_writer(val_log_dir)
         checkpoint_dir = f'model_checkpoint/training_first_block/training_checkpoints_{current_time}/model'
         x_train, x_test, y_train, y_test = load_data.load_mnist()
-        train_occ, train_nonocc, train_label = load_data.prepare_data(x_train, y_train)
-        test_occ, test_nonocc, test_label = load_data.prepare_data(x_test, y_test)
         min_total_loss = 0
         plot_curve_name = ['different loss(epoch)', 'cls loss(epoch)', 'total loss(epoch)', 'accuracy(epoch)']
-
         for epoch in range(self.epoch):
             new_epoch_start_time = time.time()
+            train_occ, train_nonocc, train_label = load_data.prepare_data(x_train,y_train)
+            test_occ, test_nonocc, test_label = load_data.prepare_data(x_test,y_test)
             if epoch != 0:
-                self.train_step(train_nonocc,train_occ,train_label)
-            train_L_diff, train_L_cls, train_L_total, train_accuracy = self.caluate_loss(train_occ, train_nonocc, train_label)
-            test_L_diff, test_L_cls, test_L_total, test_accuracy = self.caluate_loss(test_occ, test_nonocc, test_label)
+                for batch in range(int(train_nonocc.shape[0]/self.batch_size)):
+                    nonocc, occ, labels = load_data.batch_data(train_nonocc,train_occ,train_label,batch,self.batch_size)
+                    self.train_step(nonocc, occ, labels)
+
+            train_L_diff, train_L_cls, train_L_total, train_accuracy = [],[],[],[]
+            for batch in range(int(train_nonocc.shape[0] / self.batch_size)):
+                nonocc, occ, labels = load_data.batch_data(train_nonocc, train_occ, train_label, batch, self.batch_size)
+                L_diff, L_cls, L_total, accuracy = self.caluate_loss(nonocc, occ, labels)
+                train_L_diff.append(L_diff), train_L_cls.append(L_cls), train_L_total.append(L_total), train_accuracy.append(accuracy)
+
+            test_L_diff, test_L_cls, test_L_total, test_accuracy = [],[],[],[]
+            for batch in range(int(test_nonocc.shape[0] / self.batch_size)):
+                nonocc, occ, labels = load_data.batch_data(test_nonocc, test_occ, test_label, batch, self.batch_size)
+                L_diff, L_cls, L_total, accuracy = self.caluate_loss(nonocc, occ, labels)
+                test_L_diff.append(L_diff), test_L_cls.append(L_cls), test_L_total.append(L_total), test_accuracy.append(accuracy)
+
             trains = [train_L_diff, train_L_cls, train_L_total, train_accuracy]
             tests = [test_L_diff, test_L_cls, test_L_total, test_accuracy]
 
@@ -81,15 +94,16 @@ class training_PDSN():
             for idx in range(len(plot_curve_name)):
                 name = plot_curve_name[idx]
                 train, test = trains[idx], tests[idx]
-                self.plot_training_stage(train_writer, val_writer, train, test, name, epoch)
-                print('train %s:' % name, train, 'test %s:' % name, test)
+                self.plot_training_stage(train_writer, val_writer, np.mean(train), np.mean(test), name, epoch)
+                print('train %s:' % name, np.mean(train), 'test %s:' % name, np.mean(test))
 
             if epoch==0:
-                min_total_loss = test_L_total
+                min_total_loss = np.mean(test_L_total)
 
-            elif test_L_total < min_total_loss:
+            elif np.mean(test_L_total) < min_total_loss:
                 self.checkpoint.save(checkpoint_dir)
+                min_total_loss = np.mean(test_L_total)
                 print('model save.')
 
-gogogo = training_PDSN(epoch=100)
+gogogo = training_PDSN(epoch=100,batch_size=64)
 gogogo.training()
